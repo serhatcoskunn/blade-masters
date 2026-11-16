@@ -1,0 +1,18 @@
+services:
+  orbitblade-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: orbitblade-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-2567}:2567"
+    environment:
+      - PORT=2567
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--spider", "http://127.0.0.1:2567/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

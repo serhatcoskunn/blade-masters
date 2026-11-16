@@ -10,7 +10,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
-    "@colyseus/schema": "^3.0.71",
+    "@colyseus/schema": "^5.0.48",
     "@colyseus/tools": "^0.18.11",
     "@colyseus/ws-transport": "^0.18.5",
     "colyseus": "^0.18.12",

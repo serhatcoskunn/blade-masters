@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/blade_catalog.dart';
@@ -52,8 +53,20 @@ class NetworkService {
 
     // Normalize URL
     String wsUrl = serverUrl.trim();
-    if (wsUrl.isEmpty) wsUrl = 'ws://localhost:2567';
-    if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
+    if (wsUrl.isEmpty) {
+      if (kIsWeb && Uri.base.host.isNotEmpty && Uri.base.host != 'localhost') {
+        final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
+        final port = Uri.base.hasPort && Uri.base.port != 80 && Uri.base.port != 443 ? ':${Uri.base.port}' : '';
+        wsUrl = '$scheme://${Uri.base.host}$port';
+      } else {
+        wsUrl = 'ws://localhost:2567';
+      }
+    }
+    if (wsUrl.startsWith('https://')) {
+      wsUrl = wsUrl.replaceFirst('https://', 'wss://');
+    } else if (wsUrl.startsWith('http://')) {
+      wsUrl = wsUrl.replaceFirst('http://', 'ws://');
+    } else if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
       wsUrl = 'ws://$wsUrl';
     }
 

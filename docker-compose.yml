@@ -6,7 +6,7 @@ services:
     container_name: orbitblade-server
     restart: unless-stopped
     ports:
-      - "${PORT:-2567}:2567"
+      - "${SERVER_PORT:-2567}:2567"
     environment:
       - PORT=2567
       - NODE_ENV=production
@@ -16,3 +16,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  orbitblade-client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: orbitblade-client
+    restart: unless-stopped
+    depends_on:
+      - orbitblade-server
+    ports:
+      - "${CLIENT_PORT:-8080}:80"

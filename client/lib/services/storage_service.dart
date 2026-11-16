@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
@@ -70,7 +71,19 @@ class StorageService {
   }
 
   static String getServerUrl() {
-    return _prefs.getString(_keyServerUrl) ?? 'ws://localhost:2567';
+    final saved = _prefs.getString(_keyServerUrl);
+    if (saved != null && saved.trim().isNotEmpty && saved != 'ws://localhost:2567') {
+      return saved.trim();
+    }
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      if (host.isNotEmpty && host != 'localhost') {
+        final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
+        final port = Uri.base.hasPort && Uri.base.port != 80 && Uri.base.port != 443 ? ':${Uri.base.port}' : '';
+        return '$scheme://$host$port';
+      }
+    }
+    return saved ?? 'ws://localhost:2567';
   }
 
   static Future<void> setServerUrl(String url) async {

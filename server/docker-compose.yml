@@ -3,10 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: orbitblade-server
     restart: unless-stopped
-    ports:
-      - "${PORT:-2567}:2567"
+    expose:
+      - "2567"
     environment:
       - PORT=2567
       - NODE_ENV=production

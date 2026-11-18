@@ -3,10 +3,9 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: orbitblade-server
     restart: unless-stopped
-    ports:
-      - "${SERVER_PORT:-2567}:2567"
+    expose:
+      - "2567"
     environment:
       - PORT=2567
       - NODE_ENV=production
@@ -15,9 +14,8 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
-    container_name: orbitblade-client
     restart: unless-stopped
     depends_on:
       - orbitblade-server
-    ports:
-      - "${CLIENT_PORT:-8080}:80"
+    expose:
+      - "80"

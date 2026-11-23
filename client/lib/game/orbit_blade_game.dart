@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,15 @@ import '../network/network_service.dart';
 import '../services/storage_service.dart';
 
 const Color kOutlineColor = Color(0xFF0F172A);
+
+/// Maximum number of particles allowed at once to prevent GC pressure.
+const int kMaxParticles = 120;
+
+/// Maximum number of floating combat texts at once.
+const int kMaxFloatingTexts = 24;
+
+/// Maximum blade trail points per player.
+const int kMaxBladeTrailPoints = 12;
 
 class OrbitBladeGame extends FlameGame with KeyboardEvents {
   final NetworkService network;
@@ -56,6 +66,17 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
   final Set<LogicalKeyboardKey> _pressedKeys = {};
   final math.Random _random = math.Random();
 
+  // --- Cached TextPainter pool to avoid per-frame allocations ---
+  final Map<String, _CachedTextEntry> _textCache = {};
+  static const int _maxTextCacheSize = 64;
+
+  // --- Cached static floor picture (regenerated only on map change) ---
+  ui.Picture? _floorPicture;
+  String? _floorMapId;
+
+  // --- Reusable depth sort list ---
+  final List<_RenderItem> _renderablePool = [];
+
   @override
   Color backgroundColor() => const Color(0xFFE5C687); // Warm Desert Floor
 
@@ -83,6 +104,10 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
 
   void switchMap(String mapId) {
     currentMap = getMapConfigById(mapId);
+    // Invalidate cached floor when map changes
+    _floorPicture?.dispose();
+    _floorPicture = null;
+    _floorMapId = null;
   }
 
   void setJoystickInput(double dx, double dy) {
@@ -103,7 +128,11 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
   }
 
   void _spawnBurst(double x, double y, Color color, int count) {
-    for (int i = 0; i < count; i++) {
+    // Cap total particles to prevent GC pressure
+    final spawnCount = math.min(count, kMaxParticles - particles.length);
+    if (spawnCount <= 0) return;
+
+    for (int i = 0; i < spawnCount; i++) {
       final a = (math.pi * 2 * i) / count + _random.nextDouble() * 0.5;
       final spd = 90.0 + _random.nextDouble() * 170.0;
       particles.add(ParticleEffect(
@@ -189,7 +218,12 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
       buffsNotifier.value = buffs.join(' • ');
     }
 
-    // Update Live Leaderboard
+    // Update Live Leaderboard (avoid allocating if unchanged)
+    _updateLeaderboard();
+  }
+
+  /// Separated leaderboard update to avoid per-sync allocation when nothing changed.
+  void _updateLeaderboard() {
     final board = players.values.map((p) => LeaderboardEntry(
       name: p.id == mySessionId ? 'SEN' : p.name,
       kills: p.kills,
@@ -197,7 +231,22 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
     )).toList()
       ..sort((a, b) => b.kills.compareTo(a.kills));
 
-    leaderboardNotifier.value = board.take(4).toList();
+    final top = board.length > 4 ? board.sublist(0, 4) : board;
+
+    // Only update notifier if data actually changed
+    final current = leaderboardNotifier.value;
+    bool changed = current.length != top.length;
+    if (!changed) {
+      for (int i = 0; i < top.length; i++) {
+        if (current[i].name != top[i].name || current[i].kills != top[i].kills) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (changed) {
+      leaderboardNotifier.value = top;
+    }
   }
 
   void _handleHit(double x, double y, double damage, String targetId, String attackerId, String colorHex) {
@@ -213,7 +262,7 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
     } else if (damage == 0) {
       // Shield block
       _spawnBurst(x, y, const Color(0xFF38BDF8), 10);
-      floatingTexts.add(FloatingCombatText(x: x, y: y - 28, text: 'BLOK!', color: const Color(0xFF38BDF8)));
+      _addFloatingText(x, y - 28, 'BLOK!', const Color(0xFF38BDF8));
       if (attackerId == mySessionId || targetId == mySessionId) {
         hitStopTimer = 0.035;
         triggerShake(5, 0.12);
@@ -221,7 +270,7 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
     } else {
       // Successful Damage Hit
       _spawnBurst(x, y, col, 12);
-      floatingTexts.add(FloatingCombatText(x: x, y: y - 30, text: '-${damage.toInt()}', color: const Color(0xFFEF4444)));
+      _addFloatingText(x, y - 30, '-${damage.toInt()}', const Color(0xFFEF4444));
       if (attackerId == mySessionId || targetId == mySessionId) {
         hitStopTimer = 0.045;
         triggerShake(8, 0.18);
@@ -237,21 +286,21 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
     if (killerId == mySessionId && goldAwarded > 0) {
       StorageService.addGold(goldAwarded);
       goldNotifier.value = StorageService.getGold();
-      floatingTexts.add(FloatingCombatText(
-        x: localPlayer?.x ?? kWorldWidth / 2,
-        y: (localPlayer?.y ?? kWorldHeight / 2) - 42,
-        text: '+$goldAwarded ALTIN',
-        color: const Color(0xFFFACC15),
-      ));
+      _addFloatingText(
+        localPlayer?.x ?? kWorldWidth / 2,
+        (localPlayer?.y ?? kWorldHeight / 2) - 42,
+        '+$goldAwarded ALTIN',
+        const Color(0xFFFACC15),
+      );
     }
 
     if (victimId == mySessionId) {
-      floatingTexts.add(FloatingCombatText(
-        x: localPlayer?.x ?? kWorldWidth / 2,
-        y: (localPlayer?.y ?? kWorldHeight / 2) - 40,
-        text: 'YENİDEN DOĞUŞ',
-        color: const Color(0xFFF8FAFC),
-      ));
+      _addFloatingText(
+        localPlayer?.x ?? kWorldWidth / 2,
+        (localPlayer?.y ?? kWorldHeight / 2) - 40,
+        'YENİDEN DOĞUŞ',
+        const Color(0xFFF8FAFC),
+      );
     }
   }
 
@@ -268,7 +317,15 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
       col = const Color(0xFF38BDF8);
     }
 
-    floatingTexts.add(FloatingCombatText(x: x, y: y - 34, text: txt, color: col));
+    _addFloatingText(x, y - 34, txt, col);
+  }
+
+  /// Add a floating text with cap enforcement.
+  void _addFloatingText(double x, double y, String text, Color color) {
+    if (floatingTexts.length >= kMaxFloatingTexts) {
+      floatingTexts.removeAt(0); // Remove oldest
+    }
+    floatingTexts.add(FloatingCombatText(x: x, y: y, text: text, color: color));
   }
 
   @override
@@ -344,7 +401,7 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
   }
 
   // =========================================================================
-  // 1:1 BRAWL CEL-SHADED 2.5D RENDERING PIPELINE (MATCHING PROTOTYPE EXACTLY)
+  // 1:1 BRAWL CEL-SHADED 2.5D RENDERING PIPELINE
   // =========================================================================
   @override
   void render(Canvas canvas) {
@@ -369,8 +426,8 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
 
     canvas.translate(halfW - camX + sx, halfH - camY + sy);
 
-    // 1. Warm Sunlit Desert / Temple Stone Tiles
-    _renderArenaFloorAndGrid(canvas);
+    // 1. Warm Sunlit Desert / Temple Stone Tiles (cached as Picture)
+    _renderArenaFloorCached(canvas);
 
     // 2. Central Power-Up Pads
     _renderCentralPowerUps(canvas);
@@ -394,7 +451,23 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
     canvas.restore();
   }
 
-  // 1. Warm Checkered Floor with Temple Ring (Exact Prototype)
+  // 1. Floor rendering with Picture caching (static content, drawn once)
+  void _renderArenaFloorCached(Canvas canvas) {
+    if (_floorPicture == null || _floorMapId != currentMap.id) {
+      _floorPicture?.dispose();
+      _floorPicture = _buildFloorPicture();
+      _floorMapId = currentMap.id;
+    }
+    canvas.drawPicture(_floorPicture!);
+  }
+
+  ui.Picture _buildFloorPicture() {
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder);
+    _renderArenaFloorAndGrid(c);
+    return recorder.endRecording();
+  }
+
   void _renderArenaFloorAndGrid(Canvas canvas) {
     final basePaint = Paint()..color = const Color(0xFFE5C687);
     final altPaint = Paint()..color = const Color(0xFFDBB671);
@@ -502,26 +575,27 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
 
   // 4. Depth-Sorted 2.5D Scene (Walls, Bushes, Brawlers)
   void _renderDepthSortedScene(Canvas canvas) {
-    final renderables = <_RenderItem>[];
+    // Reuse the list to avoid per-frame allocation
+    _renderablePool.clear();
 
     // Walls
     for (final w in currentMap.walls) {
-      renderables.add(_RenderItem(sortY: w.y + w.h, wall: w));
+      _renderablePool.add(_RenderItem(sortY: w.y + w.h, wall: w));
     }
 
     // Bushes
     for (final b in currentMap.bushes) {
-      renderables.add(_RenderItem(sortY: b.y + b.r * 0.35, bush: b));
+      _renderablePool.add(_RenderItem(sortY: b.y + b.r * 0.35, bush: b));
     }
 
     // Brawlers (Player & Bots)
     for (final p in players.values) {
-      renderables.add(_RenderItem(sortY: p.y, brawler: p));
+      _renderablePool.add(_RenderItem(sortY: p.y, brawler: p));
     }
 
-    renderables.sort((a, b) => a.sortY.compareTo(b.sortY));
+    _renderablePool.sort((a, b) => a.sortY.compareTo(b.sortY));
 
-    for (final item in renderables) {
+    for (final item in _renderablePool) {
       if (item.wall != null) {
         _renderExtrudedWall(canvas, item.wall!);
       } else if (item.bush != null) {
@@ -858,10 +932,30 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
     }
   }
 
-  // Helper: Draw Outlined Text with Lilita One / Google Sans font
+  // Helper: Draw Outlined Text with LRU TextPainter cache to prevent GC pressure
   void _drawOutlinedText(Canvas canvas, String text, Offset center, Color fill, {double fontSize = 14}) {
-    // 1. Black Outline Pass
-    final textPainterOutline = TextPainter(
+    // Use cached TextPainter for outline (black outline is always the same per text+size)
+    final outlineKey = 'o|$text|${fontSize.toInt()}';
+    final outlinePainter = _getCachedOutlinePainter(outlineKey, text, fontSize);
+    outlinePainter.paint(canvas, Offset(center.dx - outlinePainter.width / 2, center.dy - outlinePainter.height / 2));
+
+    // For the fill pass, the color changes (alpha varies), so we build it
+    // but still cache the layout to avoid re-layout cost
+    final fillKey = 'f|$text|${fontSize.toInt()}|${fill.toARGB32()}';
+    final fillPainter = _getCachedFillPainter(fillKey, text, fontSize, fill);
+    fillPainter.paint(canvas, Offset(center.dx - fillPainter.width / 2, center.dy - fillPainter.height / 2));
+  }
+
+  TextPainter _getCachedOutlinePainter(String key, String text, double fontSize) {
+    final cached = _textCache[key];
+    if (cached != null) {
+      cached.lastUsedFrame = globalTime;
+      return cached.painter;
+    }
+
+    _evictTextCacheIfNeeded();
+
+    final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: GoogleFonts.lilitaOne(
@@ -876,10 +970,20 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
       textAlign: TextAlign.center,
     )..layout();
 
-    textPainterOutline.paint(canvas, Offset(center.dx - textPainterOutline.width / 2, center.dy - textPainterOutline.height / 2));
+    _textCache[key] = _CachedTextEntry(painter: tp, lastUsedFrame: globalTime);
+    return tp;
+  }
 
-    // 2. White / Color Fill Pass
-    final textPainterFill = TextPainter(
+  TextPainter _getCachedFillPainter(String key, String text, double fontSize, Color fill) {
+    final cached = _textCache[key];
+    if (cached != null) {
+      cached.lastUsedFrame = globalTime;
+      return cached.painter;
+    }
+
+    _evictTextCacheIfNeeded();
+
+    final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: GoogleFonts.lilitaOne(
@@ -891,7 +995,21 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
       textAlign: TextAlign.center,
     )..layout();
 
-    textPainterFill.paint(canvas, Offset(center.dx - textPainterFill.width / 2, center.dy - textPainterFill.height / 2));
+    _textCache[key] = _CachedTextEntry(painter: tp, lastUsedFrame: globalTime);
+    return tp;
+  }
+
+  void _evictTextCacheIfNeeded() {
+    if (_textCache.length < _maxTextCacheSize) return;
+
+    // Evict oldest quarter of entries
+    final entries = _textCache.entries.toList()
+      ..sort((a, b) => a.value.lastUsedFrame.compareTo(b.value.lastUsedFrame));
+
+    final removeCount = _textCache.length ~/ 4;
+    for (int i = 0; i < removeCount && i < entries.length; i++) {
+      _textCache.remove(entries[i].key);
+    }
   }
 
   // Helper: Draw Dashed Line
@@ -914,6 +1032,14 @@ class OrbitBladeGame extends FlameGame with KeyboardEvents {
       currentDist += dashSpace;
     }
   }
+}
+
+// TextPainter cache entry with LRU timestamp
+class _CachedTextEntry {
+  final TextPainter painter;
+  double lastUsedFrame;
+
+  _CachedTextEntry({required this.painter, required this.lastUsedFrame});
 }
 
 // 2.5D Depth Sorting Item

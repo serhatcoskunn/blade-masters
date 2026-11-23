@@ -1,104 +1,130 @@
 # OrbitBlade.io ⚔️
-**Production-Ready Real-Time 2D Top-Down Multiplayer Arena Game**
-*Playable across **Web, Android, and iOS** from a single client codebase.*
+
+**Gerçek Zamanlı 2D Top-Down Multiplayer Arena Oyunu**
+*Tek bir istemci kod tabanından **Web, Android ve iOS** üzerinde oynanabilir.*
 
 ---
 
-## 🌟 Overview & Architecture
+## 🌟 Genel Bakış & Mimari
 
-OrbitBlade.io consists of two unified projects:
-1. **/server**: Authoritative real-time Node.js + TypeScript + Colyseus multiplayer game server running at 30Hz tick rate with delta compression, Circle-vs-AABB physics, stealth bushes, power-up systems, and bot backfill.
-2. **/client**: Cross-platform Flutter + Flame Game Engine client with responsive landscape multi-touch virtual joystick, separate linear throw action button, custom dashed orbital guides, impact juice, shop progression, and overlays.
+OrbitBlade.io iki birleşik projeden oluşur:
 
----
-
-## 🗡️ Core Combat Mechanics
-1. **Oval Orbiting Blade**:
-   - The blade rotates continuously around the player on an elliptical path:
-     $$\text{bladeX} = \text{player.x} + rx \cdot \cos(\text{angle})$$
-     $$\text{bladeY} = \text{player.y} + ry \cdot \sin(\text{angle})$$
-   - A faint dashed oval guide is rendered around the player.
-   - A dashed radial aim line extends outward from the blade's current angle.
-2. **Strict Linear Alignment Firing (NO Auto-Aim)**:
-   - Clicking/tapping the arena canvas **never throws the blade**.
-   - Throwing is strictly triggered via the dedicated **FIRLAT / THROW** action button (bottom-right) or the **`Space` key**, allowing concurrent joystick/WASD movement.
-   - The blade fires strictly in a straight line along the exact angle it was at when triggered (`frozenAngle`).
-3. **Orbital Angle Freeze & Boomerang Return**:
-   - The moment the blade is thrown, its orbital angle freezes in place and a glowing anchor dot marks the return slot on the player's moving ellipse.
-   - When the blade reaches `range`, hits a wall, or hits an opponent, it homes back to the player's moving return slot.
-   - As soon as the blade snaps back into the anchor slot, it resumes rotating seamlessly.
-4. **Impact Juice**:
-   - Hitting deals damage, triggers target hit-stop/flash, camera micro screen-shake, expanding shockwave rings, spark particles, and floating combat text.
-5. **Stealth Bushes**:
-   - When inside a bush and not throwing, the player is concealed (`opacity: 0.35` for local player, completely invisible to remote players over the network).
-6. **Central Power-Ups**:
-   - Spawns in the central arena altar:
-     - 🔴 **2X DAMAGE**: Doubles blade damage for 8s.
-     - 🟢 **HEAL**: +45 HP immediately.
-     - 🔵 **SHIELD**: Complete invulnerability for 6s with a glowing barrier ring.
+1. **`/server`** — Otoritatif Node.js + TypeScript + Colyseus gerçek zamanlı sunucu. 30 Hz tick hızında çalışır, delta sıkıştırma, Circle-vs-AABB fizik, stealth çalılar, power-up sistemi ve bot doldurma içerir.
+2. **`/client`** — Flutter + Flame Game Engine ile çapraz platform istemci. Yatay ekranda çoklu dokunma sanal joystick, ayrı fırlatma butonu, özel kesikli yörünge kılavuzları, darbe efektleri, dükkan ilerlemesi ve overlay sistemi barındırır.
 
 ---
 
-## 📁 Project Structure
+## 🗡️ Temel Savaş Mekanikleri
 
-```text
+### 1. Yörünge Dönen Bıçak
+Bıçak, oyuncunun etrafında dairesel bir yörüngede sürekli döner:
+
+$$\text{bladeX} = \text{player.x} + r \cdot \cos(\theta)$$
+$$\text{bladeY} = \text{player.y} + r \cdot \sin(\theta)$$
+
+### 2. Manuel Fırlatma (Auto-Aim Yok)
+- Arenaya dokunmak/tıklamak **bıçağı fırlatmaz**.
+- Fırlatma yalnızca **FIRLAT** butonuyla (sağ alt) veya **`Space`** tuşuyla tetiklenir.
+- Bıçak, tetiklendiği andaki tam açıdan (`frozenAngle`) düz çizgide ilerler.
+
+### 3. Bumerang Dönüşü
+Fırlatma anında yörünge açısı donar ve dönüş yuvası parlak bir işaretle gösterilir. Menzile ulaşınca, duvara ya da rakibe çarpınca bıçak bu yuvaya geri döner.
+
+### 4. Darbe Efektleri
+Vuruş anında hedef flaş, kısa süre hit-stop, kamera sarsıntısı, kıvılcım partikülleri ve yüzen hasar yazısı tetiklenir.
+
+### 5. Stealth Çalılar
+Çalı içindeyken ve bıçak yörüngedeyken oyuncu gizlenir (lokal oyuncuda yarı saydam, uzak oyunculara tamamen görünmez).
+
+### 6. Merkezi Power-Up'lar
+- 🔴 **2X GÜÇ** — Bıçak hasarını 7 saniye ikiye katlar.
+- 🟢 **CAN** — Anında +45 HP.
+- 🔵 **KALKAN** — 1 vuruşluk tam zırh.
+
+---
+
+## 📁 Proje Yapısı
+
+```
 /game
+├── README.md
+├── docker-compose.yml
+│
 ├── server/
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── Dockerfile             # Multi-stage production container
-│   ├── docker-compose.yml     # Ready for Coolify / VPS deployment
+│   ├── Dockerfile
+│   ├── docker-compose.yml
 │   └── src/
-│       ├── index.ts           # Express + Colyseus WebSocket server
+│       ├── index.ts                  # Express + Colyseus + WS sunucu
 │       ├── rooms/
-│       │   ├── ArenaRoom.ts   # Authoritative 30Hz simulation, collisions, bots
+│       │   ├── ArenaRoom.ts          # Otoritatif 30Hz simülasyon, bot AI
+│       │   ├── ArenaEngine.ts        # Direkt WS motoru, fizik, çarpışma
 │       │   └── schema/
-│       │       └── ArenaState.ts  # Delta-synced game state schema
+│       │       └── ArenaState.ts     # Delta-sync Colyseus şeması
 │       └── shared/
-│           ├── BladeCatalog.ts    # Blade definitions & stats
-│           ├── MapConfigs.ts      # Temple Arena, Stone Labyrinth, Emerald Forest
-│           └── NetworkTypes.ts    # Network packet interfaces
+│           ├── BladeCatalog.ts       # Bıçak tanımları & istatistikleri
+│           ├── MapConfigs.ts         # Tapınak, Labirent, Orman haritaları
+│           └── NetworkTypes.ts       # Ağ paket arayüzleri
 │
 └── client/
     ├── pubspec.yaml
+    ├── Dockerfile
     ├── lib/
-    │   ├── main.dart                  # Orientation, storage init, overlay manager
+    │   ├── main.dart                        # Yön, depolama, overlay yöneticisi
     │   ├── game/
-    │   │   └── orbit_blade_game.dart  # FlameGame engine loop, canvas rendering, camera
+    │   │   └── orbit_blade_game.dart        # FlameGame döngüsü, canvas render, kamera
     │   ├── models/
-    │   │   ├── blade_catalog.dart     # Stats, price, glow colors
-    │   │   ├── map_config.dart        # Walls, bushes, collision math
-    │   │   └── game_models.dart       # Player, power-up, and particle models
+    │   │   ├── blade_catalog.dart           # İstatistik, fiyat, renk
+    │   │   ├── map_config.dart              # Duvarlar, çalılar, çarpışma matematiği
+    │   │   └── game_models.dart             # Oyuncu, power-up, partikül modelleri
     │   ├── network/
-    │   │   └── network_service.dart   # WebSocket client + seamless local practice fallback
+    │   │   └── network_service.dart         # WebSocket istemci + çevrimdışı mod
     │   ├── overlays/
-    │   │   ├── hud_overlay.dart            # HP, buffs, leaderboard, timer
-    │   │   ├── virtual_joystick.dart       # Left-side multi-touch floating joystick
-    │   │   ├── throw_button.dart           # Bottom-right FIRLAT action button
-    │   │   ├── main_lobby_overlay.dart     # Nickname, map/blade select, play button
-    │   │   ├── map_modal_overlay.dart      # Arena map selector
-    │   │   ├── shop_modal_overlay.dart     # Blade shop & gold armory
-    │   │   ├── tuning_drawer_overlay.dart  # Live mechanics slider drawer
-    │   │   └── match_results_overlay.dart  # Victory screen & gold summary
+    │   │   ├── hud_overlay.dart             # HP, buff, liderlik tablosu
+    │   │   ├── virtual_joystick.dart        # Sol taraf sanal joystick
+    │   │   ├── throw_button.dart            # FIRLAT aksiyon butonu
+    │   │   ├── main_lobby_overlay.dart      # Lobi ekranı
+    │   │   ├── map_modal_overlay.dart       # Harita seçici
+    │   │   ├── shop_modal_overlay.dart      # Bıçak dükkanı
+    │   │   ├── tuning_drawer_overlay.dart   # Canlı fizik ayar çekmecesi
+    │   │   └── match_results_overlay.dart   # Maç sonuç ekranı
     │   └── services/
-    │       └── storage_service.dart   # SharedPreferences persistence
+    │       └── storage_service.dart         # SharedPreferences kalıcı depolama
     └── web/
-        └── index.html                 # Mobile-friendly web canvas configuration
+        └── index.html
 ```
 
 ---
 
-## 🚀 How to Run & Test Locally
+## ⚡ Performans Optimizasyonları (v1.1)
 
-### 1. Run the Colyseus Server
+Uzun süre oynandığında donma/kasma sorunlarına yol açan temel performans problemleri tespit edilip düzeltildi:
+
+| Sorun | Çözüm |
+|---|---|
+| **Her karede `TextPainter` + `GoogleFonts` oluşturma** | LRU önbellek sistemi ile `TextPainter` nesneleri yeniden kullanılıyor |
+| **Her karede statik zemin çizimi (yüzlerce `drawRect`)** | `ui.Picture` ile önbelleğe alınıp tek çağrıyla çiziliyor |
+| **Sınırsız partikül birikimi** | Maks 120 partikül + 24 yüzen metin sınırı eklendi |
+| **Sınırsız bıçak izi (blade trail)** | Oyuncu başına maks 12 nokta sınırı getirildi |
+| **Her karede yeni `_RenderItem` listesi** | Tek bir liste yeniden kullanılıyor (`_renderablePool`) |
+| **Her sync'te liderlik tablosu güncellemesi** | Sadece veriler değiştiğinde `ValueNotifier` güncelleniyor |
+| **`_brawlShadows()` her çağrıda yeni liste** | `static const` ile tek sefer oluşturulup paylaşılıyor |
+| **`ValueNotifier` dispose edilmiyor** | `_GameScreenState.dispose()` içinde tüm notifier'lar temizleniyor |
+
+---
+
+## 🚀 Çalıştırma
+
+### 1. Sunucu
 ```bash
 cd server
 npm install
 npm run dev
 ```
-*Server starts on `http://localhost:2567` and `ws://localhost:2567`.*
+*Sunucu `http://localhost:2567` ve `ws://localhost:2567` üzerinde başlar.*
 
-### 2. Run the Flutter Client
+### 2. İstemci
 
 #### Web (Chrome):
 ```bash
@@ -106,7 +132,7 @@ cd client
 flutter run -d chrome
 ```
 
-#### Android Emulator or Device:
+#### Android:
 ```bash
 cd client
 flutter run -d android
@@ -124,19 +150,42 @@ cd client
 flutter run -d macos
 ```
 
-*(Note: The client also includes an automatic offline practice mode fallback, allowing instant playability even if the server is starting or offline).*
+> **Not:** İstemci, sunucu erişilemez olduğunda otomatik çevrimdışı pratik moduna geçer — sunucu olmadan da anında oynanabilir.
 
 ---
 
-## 🐳 Production Deployment (Coolify / VPS / Docker)
+## 🐳 Production Deployment (Docker)
 
-Deploy using Docker Compose:
 ```bash
+# Sadece sunucu
 cd server
+docker compose up -d --build
+
+# Sunucu + İstemci (Web)
+cd /game
 docker compose up -d --build
 ```
 
-The server includes:
-- Production Node.js 22 Alpine image
-- Health check at `http://localhost:2567/health`
-- Traefik labels for automatic Let's Encrypt SSL (`wss://`) on Coolify
+Sunucu özellikleri:
+- Node.js 22 Slim production imajı
+- `http://localhost:2567/health` sağlık kontrolü
+- Coolify/Traefik ile otomatik Let's Encrypt SSL (`wss://`)
+
+---
+
+## 🛠️ Teknoloji Yığını
+
+| Katman | Teknoloji |
+|---|---|
+| İstemci Motoru | Flutter + Flame Game Engine |
+| Sunucu Runtime | Node.js 22 + TypeScript |
+| Gerçek Zamanlı | WebSocket (ws) + Colyseus |
+| Fizik | Custom Circle-vs-AABB çarpışma |
+| Kalıcı Veri | SharedPreferences (istemci) |
+| Konteyner | Docker + Docker Compose |
+
+---
+
+## 📜 Lisans
+
+Bu proje özel kullanım içindir.

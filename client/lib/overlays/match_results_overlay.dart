@@ -155,13 +155,13 @@ class MatchResultsOverlay extends StatelessWidget {
     );
   }
 
-  List<Shadow> _brawlShadows() {
-    return const [
-      Shadow(offset: Offset(0, 2), color: Colors.black),
-      Shadow(offset: Offset(-1.5, -1.5), color: Colors.black),
-      Shadow(offset: Offset(1.5, -1.5), color: Colors.black),
-      Shadow(offset: Offset(-1.5, 1.5), color: Colors.black),
-      Shadow(offset: Offset(1.5, 1.5), color: Colors.black),
-    ];
-  }
+  static const List<Shadow> _kBrawlShadows = [
+    Shadow(offset: Offset(0, 2), color: Colors.black),
+    Shadow(offset: Offset(-1.5, -1.5), color: Colors.black),
+    Shadow(offset: Offset(1.5, -1.5), color: Colors.black),
+    Shadow(offset: Offset(-1.5, 1.5), color: Colors.black),
+    Shadow(offset: Offset(1.5, 1.5), color: Colors.black),
+  ];
+
+  List<Shadow> _brawlShadows() => _kBrawlShadows;
 }

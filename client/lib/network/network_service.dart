@@ -523,8 +523,10 @@ class NetworkService {
         }
       }
 
-      // Blade trail
-      ent.bladeTrail.add(BladeTrailPoint(x: ent.bladeX, y: ent.bladeY, life: 0.16, maxLife: 0.16));
+      // Blade trail (capped to prevent unbounded growth)
+      if (ent.bladeTrail.length < 12) {
+        ent.bladeTrail.add(BladeTrailPoint(x: ent.bladeX, y: ent.bladeY, life: 0.16, maxLife: 0.16));
+      }
       ent.bladeTrail.removeWhere((t) {
         t.life -= dt;
         return t.life <= 0;

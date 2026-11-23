@@ -77,6 +77,14 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _network.disconnect();
+    // Dispose ValueNotifiers to prevent leaks
+    _game?.hpNotifier.dispose();
+    _game?.goldNotifier.dispose();
+    _game?.killsNotifier.dispose();
+    _game?.buffsNotifier.dispose();
+    _game?.matchTimeNotifier.dispose();
+    _game?.bladeInOrbitNotifier.dispose();
+    _game?.leaderboardNotifier.dispose();
     super.dispose();
   }
 

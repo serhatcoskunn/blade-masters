@@ -523,24 +523,25 @@ class NetworkService {
         }
       }
 
-      // Blade trail (capped to prevent unbounded growth)
+      // Blade trail (capped to prevent unbounded growth, in-place aging)
       if (ent.bladeTrail.length < 12) {
         ent.bladeTrail.add(BladeTrailPoint(x: ent.bladeX, y: ent.bladeY, life: 0.16, maxLife: 0.16));
       }
-      ent.bladeTrail.removeWhere((t) {
-        t.life -= dt;
-        return t.life <= 0;
-      });
+      for (int i = ent.bladeTrail.length - 1; i >= 0; i--) {
+        ent.bladeTrail[i].life -= dt;
+        if (ent.bladeTrail[i].life <= 0) {
+          ent.bladeTrail.removeAt(i);
+        }
+      }
 
-      // Target combat hit checks
-      final targets = ent.isBot
-          ? _simPlayers.where((p) => p.id != ent.id).toList()
-          : _simPlayers.where((p) => p.isBot).toList();
-
-      for (final target in targets) {
+      // Target combat hit checks (zero-allocation loop over _simPlayers)
+      for (final target in _simPlayers) {
+        if (ent.isBot ? target.id == ent.id : !target.isBot) continue;
         if (target.hp <= 0 || ent.hitTargets.contains(target.id)) continue;
-        final hitDist = hypot(ent.bladeX - target.x, ent.bladeY - target.y);
-        if (hitDist <= target.radius + 18) {
+        final dx = ent.bladeX - target.x;
+        final dy = ent.bladeY - target.y;
+        final hitR = target.radius + 18.0;
+        if (dx * dx + dy * dy <= hitR * hitR) {
           ent.hitTargets.add(target.id);
 
           if (target.shieldHits > 0) {

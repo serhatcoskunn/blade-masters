@@ -241,7 +241,10 @@ bool doesBladeHitWall(double bx, double by, MapConfigData map, [double bladeRadi
 // Bush Stealth Sensor (exact replica of prototype)
 bool checkInsideBush(double x, double y, MapConfigData map) {
   for (final b in map.bushes) {
-    if (hypot(x - b.x, y - b.y) < b.r * 0.85) {
+    final dx = x - b.x;
+    final dy = y - b.y;
+    final thresh = b.r * 0.85;
+    if (dx * dx + dy * dy < thresh * thresh) {
       return true;
     }
   }

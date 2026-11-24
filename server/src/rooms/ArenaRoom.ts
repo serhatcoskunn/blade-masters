@@ -399,9 +399,6 @@ export class ArenaRoom {
     const spec = getBladeSpec(player.bladeId);
     const b = player.blade;
 
-    const anchorX = player.x + spec.rx * Math.cos(b.frozenAngle);
-    const anchorY = player.y + spec.ry * Math.sin(b.frozenAngle);
-
     if (b.state === 'orbit') {
       b.angle = (b.angle + spec.orbitSpeed * dt) % (Math.PI * 2);
       b.spin = b.angle;
@@ -484,6 +481,8 @@ export class ArenaRoom {
       }
     } else if (b.state === 'return') {
       b.spin += 18 * dt;
+      const anchorX = player.x + spec.rx * Math.cos(b.frozenAngle);
+      const anchorY = player.y + spec.ry * Math.sin(b.frozenAngle);
       const dx = anchorX - b.x;
       const dy = anchorY - b.y;
       const dist = Math.hypot(dx, dy);

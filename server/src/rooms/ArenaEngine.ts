@@ -38,6 +38,7 @@ const DEFAULT_BOT_COUNT = 3;
 export interface ClientConnection {
   sessionId: string;
   send: (type: string, data: any) => void;
+  sendRaw?: (payload: string) => void;
   isOpen: () => boolean;
 }
 
@@ -237,9 +238,15 @@ export class ArenaEngine {
   }
 
   public broadcast(type: string, data: any) {
+    if (this.clients.size === 0) return;
+    const payload = JSON.stringify({ type, data });
     this.clients.forEach((c) => {
       if (c.isOpen()) {
-        c.send(type, data);
+        if (c.sendRaw) {
+          c.sendRaw(payload);
+        } else {
+          c.send(type, data);
+        }
       }
     });
   }
@@ -377,8 +384,10 @@ export class ArenaEngine {
 
       this.players.forEach((player) => {
         if (!pow.active) return;
-        const dist = Math.hypot(player.x - pow.x, player.y - pow.y);
-        if (dist <= player.radius + 20) {
+        const dx = player.x - pow.x;
+        const dy = player.y - pow.y;
+        const pickupR = player.radius + 20;
+        if (dx * dx + dy * dy <= pickupR * pickupR) {
           pow.active = false;
           pow.respawn = 9.0;
 
@@ -396,8 +405,14 @@ export class ArenaEngine {
       });
     });
 
-    // 2. Players & Bots
-    const humanPlayer = Array.from(this.players.values()).find((p) => !p.isBot);
+    // 2. Players & Bots (zero-allocation human lookup)
+    let humanPlayer: EnginePlayer | undefined;
+    for (const p of this.players.values()) {
+      if (!p.isBot) {
+        humanPlayer = p;
+        break;
+      }
+    }
 
     this.players.forEach((player) => {
       if (player.dmgTimer > 0) player.dmgTimer = Math.max(0, player.dmgTimer - dt);
@@ -515,8 +530,10 @@ export class ArenaEngine {
           if (target.id === player.id || target.hp <= 0 || bb.hitTargets.has(target.id)) return;
           if (bb.state !== 'out') return;
 
-          const dist = Math.hypot(bb.x - target.x, bb.y - target.y);
-          if (dist <= target.radius + 18) {
+          const dx = bb.x - target.x;
+          const dy = bb.y - target.y;
+          const hitR = target.radius + 18;
+          if (dx * dx + dy * dy <= hitR * hitR) {
             bb.hitTargets.add(target.id);
 
             if (target.shieldHits > 0) {
@@ -584,6 +601,7 @@ export class ArenaEngine {
   }
 
   private broadcastStateSnapshot() {
+    if (this.clients.size === 0) return;
     const playersList: PlayerNetData[] = [];
 
     this.players.forEach((p) => {

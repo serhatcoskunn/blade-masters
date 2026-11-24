@@ -55,6 +55,11 @@ wss.on('connection', (ws: WebSocket) => {
         ws.send(JSON.stringify({ type, data }));
       }
     },
+    sendRaw: (payload: string) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(payload);
+      }
+    },
     isOpen: () => ws.readyState === WebSocket.OPEN,
   };
 

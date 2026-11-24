@@ -158,7 +158,10 @@ export function bladeHitsWall(
 // Stealth Bush Check
 export function isInsideBush(x: number, y: number, map: MapConfig): boolean {
   for (const b of map.bushes) {
-    if (Math.hypot(x - b.x, y - b.y) < b.r * 0.85) {
+    const dx = x - b.x;
+    const dy = y - b.y;
+    const thresh = b.r * 0.85;
+    if (dx * dx + dy * dy < thresh * thresh) {
       return true;
     }
   }

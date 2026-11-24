@@ -74,17 +74,21 @@ class _GameScreenState extends State<GameScreen> {
     _game = OrbitBladeGame(network: _network);
   }
 
+  void _disposeGameNotifiers(OrbitBladeGame? game) {
+    if (game == null) return;
+    game.hpNotifier.dispose();
+    game.goldNotifier.dispose();
+    game.killsNotifier.dispose();
+    game.buffsNotifier.dispose();
+    game.matchTimeNotifier.dispose();
+    game.bladeInOrbitNotifier.dispose();
+    game.leaderboardNotifier.dispose();
+  }
+
   @override
   void dispose() {
     _network.disconnect();
-    // Dispose ValueNotifiers to prevent leaks
-    _game?.hpNotifier.dispose();
-    _game?.goldNotifier.dispose();
-    _game?.killsNotifier.dispose();
-    _game?.buffsNotifier.dispose();
-    _game?.matchTimeNotifier.dispose();
-    _game?.bladeInOrbitNotifier.dispose();
-    _game?.leaderboardNotifier.dispose();
+    _disposeGameNotifiers(_game);
     super.dispose();
   }
 
@@ -94,6 +98,9 @@ class _GameScreenState extends State<GameScreen> {
     final mapId = StorageService.getSelectedMap();
     final srvUrl = StorageService.getServerUrl();
     final botCount = StorageService.getBotCount();
+
+    // Dispose previous game's notifiers before replacing
+    _disposeGameNotifiers(_game);
 
     // Create Game instance
     final game = OrbitBladeGame(network: _network);
